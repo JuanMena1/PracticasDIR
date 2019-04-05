@@ -1,11 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include "mpi.h"
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
+#define MANEJADOR 0
 #define L 4
+
 #define NORTE 0
 #define SUR 1
 #define ESTE 2
@@ -13,6 +14,7 @@
 
 float numeros[L*L];
 FILE *fp;
+
 int size, rank;
 MPI_Status status;
 
@@ -45,7 +47,7 @@ void vecinosToroide(int vecinos[]){
 
 	//Calculamos Sur en caso de que nos toque la fila 0
 	if (fila == 0){
-		vecinos[SUR] = nodo+((L-1)*L);
+		vecinos[SUR] = nodo +((L-1)*L);
 	}else{
 		vecinos[SUR] = nodo-L;
 	}
@@ -75,13 +77,13 @@ float calcularMenor(float mi_numero, int vecinos[]){
 	float su_numero;
 
 	//Envio vertical
-		for(i=0;i<L;i++){
+		for(i=1;i<L;i++){
 			MPI_Bsend(&mi_numero, 1, MPI_FLOAT, vecinos[SUR], i, MPI_COMM_WORLD);
 			MPI_Recv(&su_numero, 1, MPI_FLOAT, vecinos[NORTE], MPI_ANY_TAG, MPI_COMM_WORLD, &status);
 			mi_numero = MIN(mi_numero, su_numero);
 		}
 		//Envio horizontal
-		for(i=0;i<L;i++){
+		for(i=1;i<L;i++){
 			MPI_Bsend(&mi_numero, 1, MPI_FLOAT, vecinos[ESTE], i, MPI_COMM_WORLD);
 			MPI_Recv(&su_numero, 1, MPI_FLOAT, vecinos[OESTE], MPI_ANY_TAG, MPI_COMM_WORLD, &status);
 			mi_numero = MIN(mi_numero, su_numero);
@@ -92,29 +94,31 @@ float calcularMenor(float mi_numero, int vecinos[]){
 int main(int argc, char *argv[])
 {
 
-	float minimo;
+	//float minimo;
+	float mi_numero;
+	int vecinos[4];
+
 	MPI_Init (&argc, &argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-	if(rank==0){
+
+	if(rank==MANEJADOR){
 		if(size<(L*L)+1){
 			fprintf(stderr, "ERROR, no se han lanzado los suficientes procesos, necesito al menos %d\n", ((L*L)+1));
 			exit(EXIT_FAILURE);
 		}
 		obtenerNumeros();
 		enviarDatos();
-		MPI_Recv(&minimo, 1, MPI_FLOAT, 1, MPI_ANY_TAG, MPI_COMM_WORLD,&status);
-		printf("El mínimo de la red es %2.2f\n",minimo );
+		MPI_Recv(&mi_numero, 1, MPI_FLOAT, 1, MPI_ANY_TAG, MPI_COMM_WORLD,&status);
+		printf("El mínimo de la red TOROIDE es %2.2f\n",mi_numero);
 	}
 	else {
-		float mi_numero;
-		int vecinos[4];
-		MPI_Recv(&mi_numero, 1, MPI_FLOAT, 0, MPI_ANY_TAG, MPI_COMM_WORLD,&status);
+		MPI_Recv(&mi_numero, 1, MPI_FLOAT, MANEJADOR, MPI_ANY_TAG, MPI_COMM_WORLD,&status);
 		vecinosToroide(&vecinos);
 		mi_numero = calcularMenor(mi_numero, &vecinos);
 		if(rank==1)
-			MPI_Bsend(&mi_numero, 1, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+			MPI_Bsend(&mi_numero, 1, MPI_FLOAT, MANEJADOR, 0, MPI_COMM_WORLD);
 	}
 	MPI_Finalize();
 	return 0;
