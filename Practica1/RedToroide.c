@@ -5,7 +5,7 @@
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
 #define MANEJADOR 0
-#define L 4
+#define L 3
 
 #define NORTE 0
 #define SUR 1
