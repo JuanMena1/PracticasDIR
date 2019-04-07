@@ -85,17 +85,17 @@ int main(int argc, char *argv[])
 
 	numeros_documento = cantidadNumeros();
 
-	if(size<NUM_NODOS){
+	if(size<NUM_NODOS){ //Comprueba que haya los suficientes procesos para ejecutar
 		continua=1;
-	} else if(numeros_documento < NUM_NODOS){
+	} else if(numeros_documento < NUM_NODOS){ //Comprueba que haya los suficientes valores en 'datos.dat' para ejecutar
 		continua=2;
 	}
 
 	if(rank==0){
-		if(continua==1){
+		if(continua==1){ //Comprueba que haya los suficientes procesos para ejecutar
 			fprintf(stderr, "ERROR, no se han lanzado los suficientes procesos, necesito al menos %d\n", NUM_NODOS);
 		}
-		else if (continua==2){
+		else if (continua==2){ //Comprueba que haya los suficientes valores en 'datos.dat' para ejecutar
 			fprintf(stderr, "ERROR, en el documento 'datos.dat' no hay suficientes valores, debe haber al menos %d\n", NUM_NODOS);
 		} else {
 			obtenerNumeros(&numeros);
@@ -108,7 +108,7 @@ int main(int argc, char *argv[])
 		}
 	}
 	else {
-		if(continua==0 && rank < NUM_NODOS){
+		if(continua==0 && rank < NUM_NODOS){ //Comprueba que pueda ejecutar y que el proceso pertenezca a la red
 			MPI_Recv(&mi_numero, 1, MPI_FLOAT, 0, MPI_ANY_TAG, MPI_COMM_WORLD,&status);
 			vecinosHipercubo(&vecinos);
 			mi_numero = calcularMayor(mi_numero, &vecinos);
