@@ -6,25 +6,38 @@
 
 #define MANEJADOR 0
 #define L 3
+#define NUM_NODOS L*L
 
 #define NORTE 0
 #define SUR 1
 #define ESTE 2
 #define OESTE 3
 
-float numeros[L*L];
+
+float numeros[NUM_NODOS];
 FILE *fp;
 
 int size, rank;
 MPI_Status status;
 
+//Cuenta la cantidad de números que hay en el documento 'datos.dat'
+int cantidadNumeros(){
+	int n = 0;
+	float num;
+	fp = fopen("datos.dat", "r");
+	while((fscanf(fp, "%f,", &num)) != EOF){
+		n++;
+	}
+	return n;
+}
+//Obtiene los números del documento
 void obtenerNumeros(){
 	int i=0;
 	float num;
 	fp = fopen("datos.dat", "r");
 
 	while((fscanf(fp, "%f,", &num)) != EOF){
-		if(i<L*L){
+		if(i<NUM_NODOS){
 			numeros[i] = num;
 			i++;
 		}else 
@@ -33,13 +46,15 @@ void obtenerNumeros(){
 	fclose(fp);
 }
 
+//Envia los valores a cada proceso
 void enviarDatos(){
 	int i;
-	for(i=0;i<L*L;i++){
+	for(i=0;i<NUM_NODOS;i++){
 		MPI_Bsend(&numeros[i], 1, MPI_FLOAT, i+1, i, MPI_COMM_WORLD);
 	}
 }
 
+//Obtiene los vecinos de cada nodo
 void vecinosToroide(int vecinos[]){
 	int nodo = rank;
 	int fila = (nodo-1)/L;
@@ -72,6 +87,7 @@ void vecinosToroide(int vecinos[]){
 	}
 }
 
+//Calcula el menor número de toda la red
 float calcularMenor(float mi_numero, int vecinos[]){
 	int i;
 	float su_numero;
@@ -94,32 +110,48 @@ float calcularMenor(float mi_numero, int vecinos[]){
 int main(int argc, char *argv[])
 {
 
-	//float minimo;
 	float mi_numero;
 	int vecinos[4];
+	int continua=0;
+	int numeros_documento = 0;
 
 	MPI_Init (&argc, &argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
 
 
+	numeros_documento = cantidadNumeros();
+
+	if(size<(NUM_NODOS)+1){
+		continua=1;
+	} else if(numeros_documento < NUM_NODOS){
+		continua=2;
+	}
+
+
 	if(rank==MANEJADOR){
-		if(size<(L*L)+1){
-			fprintf(stderr, "ERROR, no se han lanzado los suficientes procesos, necesito al menos %d\n", ((L*L)+1));
-			exit(EXIT_FAILURE);
+		if(continua==1){
+			fprintf(stderr, "ERROR, no se han lanzado los suficientes procesos, necesito al menos %d\n", (NUM_NODOS)+1);
 		}
-		obtenerNumeros();
-		enviarDatos();
-		MPI_Recv(&mi_numero, 1, MPI_FLOAT, 1, MPI_ANY_TAG, MPI_COMM_WORLD,&status);
-		printf("El mínimo de la red TOROIDE es %2.2f\n",mi_numero);
+		else if (continua==2){
+			fprintf(stderr, "ERROR, en el documento 'datos.dat' no hay suficientes valores, debe haber al menos %d\n", NUM_NODOS);
+		} else {
+			obtenerNumeros();
+			enviarDatos();
+			MPI_Recv(&mi_numero, 1, MPI_FLOAT, 1, MPI_ANY_TAG, MPI_COMM_WORLD,&status);
+			printf("El mínimo de la red TOROIDE es %2.2f\n",mi_numero);
+		}
 	}
 	else {
-		MPI_Recv(&mi_numero, 1, MPI_FLOAT, MANEJADOR, MPI_ANY_TAG, MPI_COMM_WORLD,&status);
-		vecinosToroide(&vecinos);
-		mi_numero = calcularMenor(mi_numero, &vecinos);
-		if(rank==1)
-			MPI_Bsend(&mi_numero, 1, MPI_FLOAT, MANEJADOR, 0, MPI_COMM_WORLD);
+		if(continua==0 && rank < (NUM_NODOS)+1){
+			MPI_Recv(&mi_numero, 1, MPI_FLOAT, MANEJADOR, MPI_ANY_TAG, MPI_COMM_WORLD,&status);
+			vecinosToroide(&vecinos);
+			mi_numero = calcularMenor(mi_numero, &vecinos);
+			if(rank==1)
+				MPI_Bsend(&mi_numero, 1, MPI_FLOAT, MANEJADOR, 0, MPI_COMM_WORLD);
+		}
 	}
+	
 	MPI_Finalize();
 	return 0;
 }
