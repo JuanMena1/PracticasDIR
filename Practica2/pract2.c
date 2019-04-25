@@ -6,7 +6,10 @@
 #include <X11/Xlib.h> 
 #include <assert.h>   
 #include <unistd.h>   
-#define NIL (0)       
+#define NIL (0)  
+#define NUM_HIJOS 4
+#define FILTRO 3  
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))   
 
 /*Variables Globales */
 
@@ -67,9 +70,7 @@ int main (int argc, char *argv[]) {
   int tag;
   MPI_Status status;
   int buf[5];
-  int np = 4;
-  int errcodes[np];
-
+  int errcodes[NUM_HIJOS];
 
   MPI_Init(&argc, &argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -77,38 +78,84 @@ int main (int argc, char *argv[]) {
   MPI_Comm_get_parent( &commPadre );
   if ( (commPadre==MPI_COMM_NULL)
         && (rank==0) )  {
-
 	initX();
-
+  int i;
 	/* Codigo del maestro */
 
 	/*En algun momento dibujamos puntos en la ventana algo como
 	dibujaPunto(x,y,r,g,b);  */
-  MPI_Comm_spawn("pract2", MPI_ARGV_NULL, np, MPI_INFO_NULL, 0, MPI_COMM_WORLD, &commPadre, errcodes);
+  MPI_Comm_spawn("pract2", MPI_ARGV_NULL, NUM_HIJOS, MPI_INFO_NULL, 0, MPI_COMM_WORLD, &commPadre, errcodes);
 
   for(i=0;i<400*400;i++){
-    MPI_Recv(&buf, 5, MPI_FLOAT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
+    MPI_Recv(&buf, 5, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, commPadre, MPI_STATUS_IGNORE);
 
     dibujaPunto(buf[0],buf[1],buf[2],buf[3],buf[4]);
   }
-
+    sleep(3);
   }
 
  	
   else {
     /* Codigo de todos los trabajadores */
     /* El archivo sobre el que debemos trabajar es foto.dat */
-    MPI_File_open( MPI_Comm comm, char *filename, int amode, MPI_Info info, MPI_File *mpi_fh);
+    int i;
+    int j;
+    int filasPorProceso=400/NUM_HIJOS;
+    int elementosPorProceso=filasPorProceso*400*sizeof(unsigned char)*3;
 
+    int inicioLectura=filasPorProceso*rank;
+    int finalLectura=inicioLectura+filasPorProceso;
 
+    MPI_File archivo;
 
+    /*Abrimos el fichero con permisos de lectura*/
+    MPI_File_open(MPI_COMM_WORLD, "foto.dat", MPI_MODE_RDONLY, MPI_INFO_NULL, &archivo);
 
-    MPI_Send(buf, 1, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+    MPI_File_set_view(archivo, elementosPorProceso*rank, MPI_UNSIGNED_CHAR, MPI_UNSIGNED_CHAR, "native", MPI_INFO_NULL);
 
+    /*Array para guardar los valores de RGB*/
+    unsigned char rgb[3];
 
+    /*Se controla el tamaño del último proceso*/
+    if(rank == NUM_HIJOS-1)
+      finalLectura=400;
+
+    for(i=inicioLectura;i<finalLectura;i++){
+      for(j=0;j<400;j++){
+        MPI_File_read(archivo, rgb, 3, MPI_UNSIGNED_CHAR, &status);
+        buf[0]=j;           /*Coordenada x*/
+        buf[1]=i;           /*Coordenada y*/
+
+        switch(FILTRO){
+          case 0: /*Sin filtro*/
+            buf[2]=(int)rgb[0]; /*Rojo*/
+            buf[3]=(int)rgb[1]; /*Verde*/
+            buf[4]=(int)rgb[2]; /*Azul*/
+            break;
+          case 1: /*Filtro negativo*/
+            buf[2]=255 - (int)rgb[0]; /*Rojo*/
+            buf[3]=255 - (int)rgb[1]; /*Verde*/
+            buf[4]=255 - (int)rgb[2]; /*Azul*/
+            break;
+          case 2: /*Filtro blanco y negro*/
+            buf[2]=((int)rgb[0] + (int)rgb[1] + (int)rgb[2])/3; /*Rojo*/
+            buf[3]=((int)rgb[0] + (int)rgb[1] + (int)rgb[2])/3; /*Verde*/
+            buf[4]=((int)rgb[0] + (int)rgb[1] + (int)rgb[2])/3; /*Azul*/
+            break;
+          case 3: /*Filtro sepia*/
+            buf[2]=MIN(((.3 * rgb[0] + .6 * rgb[1] + .1 * rgb[2]) + 40),255);         /*Rojo*/
+            buf[3]=MIN(((.3 * rgb[0] + .6 * rgb[1] + .1 * rgb[2]) + 15),255);  /*Verde*/
+            buf[4]=.3 * rgb[0] + .6 * rgb[1] + .1 * rgb[2];   /*Azul*/
+            break;
+        }        
+
+        MPI_Send(&buf, 5, MPI_INT, 0, 0, commPadre);
+      }
+    }
+    MPI_File_close(&archivo);
   }
 
   MPI_Finalize();
+  return 0;
 
 }
-
